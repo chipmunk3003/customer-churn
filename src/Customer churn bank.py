@@ -11,48 +11,7 @@ from sklearn.pipeline import Pipeline
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
-
-'''
-# get Random forest model (n_estimators is number of descision trees used)
-model = RandomForestClassifier(n_estimators=100, random_state=0)
-model.fit(x_train, y_train)
-y_pred = model.predict(x_test)
-
-# evaluate and test accuracy of model
-conf_matrix = confusion_matrix(y_test, y_pred)
-class_report = classification_report(y_test, y_pred)
-accuracy = accuracy_score(y_test, y_pred)
-
-sns.heatmap(
-    conf_matrix,
-    annot=True,
-    fmt="d",
-    cmap="Blues"
-)
-
-plt.xlabel("Predicted")
-plt.ylabel("Actual")
-plt.title("Confusion Matrix")
-plt.savefig("results/confusion_matrix_randomForest.png")
-plt.close()
-
-print(class_report)
-print(accuracy)
-
-# visualize the importances of each feature
-importances = model.feature_importances_
-indices = np.argsort(importances)[::-1] # reverses order so most to least important
-names = [features[i] for i in indices]
-
-plt.figure(figsize=(10,6))
-plt.title("Feature importance")
-plt.barh(range(x.shape[1]), importances[indices])
-plt.yticks(range(x.shape[1]), names)
-plt.savefig("results/feature_importances_randomForest.png")
-plt.close()
-
-'''
+from sklearn.metrics import classification_report, confusion_matrix, roc_curve, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 
 
 
@@ -108,7 +67,7 @@ def plotChurnByCategory(df, col):
     plt.close()
 
 
-# creates a 
+# creates a box plot to show the distribution of a feature if the customer churns and if they don't
 def plotChurnForNumerical(df, col):
     plt.figure(figsize=(7,5))
     sns.boxplot(data=df, x='Exited', y=col)
@@ -184,6 +143,7 @@ def makePredictions(model, x_test):
     return predictions, probabilities
 
 
+# evaluates the effectiveness of a model on the test data using a range of metrics and presents them in the terminal
 def evaluateModel(y_test, preds, probs):
     accuracy = accuracy_score(y_true=y_test, y_pred=preds)
     precision = precision_score(y_true=y_test, y_pred=preds)
@@ -217,9 +177,63 @@ def compareModels(logistic_results, rf_results):
     return results
 
 
-def createVisualisations():
-    ...
+# plots and saves a confusion matrix from the data inputted
+def plotConfMat(y_test, preds, modelName):
+    matrix = confusion_matrix(y_true=y_test, y_pred=preds)
+    plt.figure(figsize=(6,5))
+    sns.heatmap(matrix, annot=True, fmt="d")
+    plt.title(f"{modelName} confusion matrix")
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+    plt.tight_layout()
+    plt.savefig(f"results/{modelName.lower().replace(" ", "_")}_confusion_matrix.png")
+    plt.close()
 
+
+# plots the ROC curve for logistic regression and random forest
+def plotRocCurves(y_test, probs_logictic, probs_randomForest):
+    logistic_fpr, logistic_tpr, _ = roc_curve(y_test, probs_logictic)
+    random_forest_fpr, random_forest_tpr, _ = roc_curve(y_test, probs_randomForest)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(logistic_fpr, logistic_tpr, label="Logistic Regression")
+    plt.plot(random_forest_fpr, random_forest_tpr, label="Random Forest")
+
+    plt.plot([0, 1], [0, 1], linestyle="--", label="Random")
+
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("ROC Curve")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("results/roc_curve.png")
+    plt.close()
+
+
+# plots the top 10 features by importance for the model inputted
+def plotFeatureImportance(model, modelName):
+    #features = ['CreditScore', 'Gender', 'Age', 'Tenure', 'Balance', 'NumOfProducts', 'HasCrCard', 'IsActiveMember', 'Geography']
+    preprocessor = model.named_steps["preprocessor"]
+    classifier = model.named_steps["classifier"]
+    importances = classifier.feature_importances_
+    features = preprocessor.get_feature_names_out()
+
+    importance_df = pd.DataFrame({"Feature": features, "Importance": importances})
+    importance_df = importance_df.sort_values(by="Importance", ascending=False)
+
+    topFeatures = importance_df.head(10)
+
+    plt.figure(figsize=(10,6))
+    sns.barplot(data=topFeatures, x="Importance", y="Feature")
+    plt.title("Top 10 feature importances")
+    plt.tight_layout()
+    plt.savefig(f"results/{modelName.lower().replace(" ", "_")}_feature_importance.png")
+    plt.close()
+
+    return importance_df
+    
+
+# main function that completes the data analysis and model training and evaluation
 def main():
     df = loadData()
 
@@ -248,8 +262,16 @@ def main():
     rfResults = evaluateModel(y_test, predictions_randomForest, probabilities_randomForest)
 
     # comparison of the models for model selection
-    results = compareModels(logisticResults, rfResults)
+    compareModels(logisticResults, rfResults)
 
+    plotConfMat(y_test, predictions_logictic, "Logistic Regression")
+    plotConfMat(y_test, predictions_randomForest, "Random Forest")
+
+    plotRocCurves(y_test, probabilities_logictic, probabilities_randomForest)
+
+    # plot feature importance for both models
+    #plotFeatureImportance(logisticModel, "Logistic Regression")
+    plotFeatureImportance(randomForestModel, "Random Forest")
 
 
 if __name__ == "__main__":
